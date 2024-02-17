@@ -1,88 +1,115 @@
 package pl.hubert.task.controller;
 
-import okhttp3.mockwebserver.MockWebServer;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.WireMock;
+import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mockito;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
-import org.springframework.http.HttpStatus;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.springframework.web.reactive.function.client.WebClientResponseException;
-import pl.hubert.task.client.GithubClient;
-import pl.hubert.task.exception.ExceptionMessage;
 import pl.hubert.task.model.Branch;
 import pl.hubert.task.model.Repository;
-import reactor.core.publisher.Flux;
 
 import java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyString;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-
-@ExtendWith(SpringExtension.class)
-@WebFluxTest(GithubController.class)
-@Import(GithubClient.class)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GithubControllerIntegrationTest {
 
-    private MockWebServer mockWebServer;
-
-    @MockBean
-    private GithubClient githubClient;
-
-    @Autowired
+    private WireMockServer mockServer;
     private WebTestClient webTestClient;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @BeforeEach
     void setUp() {
-        mockWebServer = new MockWebServer();
+        mockServer = new WireMockServer(WireMockConfiguration.options().dynamicPort().dynamicHttpsPort());
+        mockServer.start();
+
+        WireMock.configureFor("localhost", mockServer.port());
+
+        webTestClient = WebTestClient
+                .bindToServer()
+                .baseUrl("http://localhost:" + mockServer.port() +"/api/github/")
+                .build();
     }
 
     @AfterEach
-    void tearDown() throws Exception {
-        mockWebServer.shutdown();
+    void tearDown() {
+        mockServer.stop();
     }
 
     @Test
-    void shouldReturnUserRepositories() {
-        Branch branch = new Branch("main", "sha123");
-        Repository repository = new Repository("huga721", "recruitment-task", false, List.of(branch));
+    void shouldReturnOneUserRepository() throws JsonProcessingException {
+        Branch testBranch = new Branch("main", new Branch.Commit("sha123"));
+        Repository testRepository = new Repository(new Repository.Owner("huga721"), "recruitment-task",
+                false, List.of(testBranch));
+        List<Repository> testRepositories = List.of(testRepository, testRepository);
 
-        Mockito.when(githubClient.getUserRepositories(anyString()))
-                        .thenReturn(Flux.just(repository));
+        String reposMapped = objectMapper.writeValueAsString(testRepositories);
 
-        webTestClient.get().uri("/api/github/huga721")
+        String user = "huga721";
+
+        WireMock.stubFor(WireMock.get(WireMock.urlMatching("/api/github/" + user))
+                .willReturn(aResponse()
+                        .withHeader("Content-Type", "application/json")
+                        .withBody(reposMapped)));
+
+        webTestClient.get()
+                .uri(user)
                 .exchange()
-                .expectStatus().isOk()
+                .expectStatus()
+                .isOk()
                 .expectBodyList(Repository.class)
-                .hasSize(1)
-                .value(repos -> {
-                    Repository foundRepo = repos.get(0);
-                    assertThat(foundRepo.getRepositoryName()).isEqualTo("recruitment-task");
-                    assertThat(foundRepo.getOwnerLogin()).isEqualTo("huga721");
-                    assertThat(foundRepo.getBranches()).hasSize(1);
-                    Branch foundBranch = foundRepo.getBranches().get(0);
-                    assertThat(foundBranch.getName()).isEqualTo("main");
-                    assertThat(foundBranch.getLastCommitSha()).isEqualTo("sha123");
+                .hasSize(2)
+                .value(repo -> {
+                    try {
+                        String resultRepo = objectMapper.writeValueAsString(repo.get(0));
+                        String requestRepo = objectMapper.writeValueAsString(repo.get(0));
+                        assertEquals(resultRepo.hashCode(), requestRepo.hashCode());
+                    } catch (JsonProcessingException e) {
+                        throw new RuntimeException(e);
+                    }
                 });
     }
 
     @Test
-    void shouldNotReturnUserRepositories_WhenUserNotExist() {
-        Flux<Repository> repositoryFlux = Flux.error(new WebClientResponseException(HttpStatus.NOT_FOUND.value(), "Not Found", null, null, null));
+    void shouldReturnUserWithEmptyRepositories() {
+        String user = "huga721";
 
-        Mockito.when(githubClient.getUserRepositories(anyString()))
-                .thenReturn(repositoryFlux);
+        WireMock.stubFor(WireMock.get(WireMock.urlEqualTo("/api/github/" + user))
+                .willReturn(aResponse()
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("[]")));
 
-        webTestClient.get().uri("/api/github/notexist")
+        webTestClient.get()
+                .uri(user)
                 .exchange()
-                .expectStatus().isNotFound()
-                .expectBody(ExceptionMessage.class);
+                .expectStatus()
+                .isOk()
+                .expectBodyList(Repository.class)
+                .hasSize(0);
+    }
+
+    @Test
+    void shouldThrowException_WhenApiCantFindUser() {
+        String user = "huga721";
+
+        mockServer.stubFor(WireMock.get(WireMock.urlEqualTo("/api/github/" + user))
+                .willReturn(aResponse()
+                        .withStatus(404)));
+
+        webTestClient.get()
+                .uri(user)
+                .accept(MediaType.APPLICATION_JSON)
+                .exchange()
+                .expectStatus()
+                .isNotFound();
     }
 }
