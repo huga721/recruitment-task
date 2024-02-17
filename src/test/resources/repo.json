@@ -1,0 +1,20 @@
+{
+  "repository_name": "codewars",
+  "owner": {
+    "login": "huga721"
+  },
+  "branches": [
+    {
+      "name": "main",
+      "commit": {
+        "sha": "07eab55e98a4a2070865f84fe98e7ad0181f2d9b"
+      }
+    },
+    {
+      "name": "master",
+      "commit": {
+        "sha": "4f740e2340fc2860569c07d190e7ba3420ef07a9"
+      }
+    }
+  ]
+}
