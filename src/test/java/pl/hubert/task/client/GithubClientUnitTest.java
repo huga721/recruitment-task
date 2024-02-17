@@ -20,7 +20,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class GithubServiceUnitTest {
+class GithubClientUnitTest {
 
     @Mock
     private WebClient webClientMock;
@@ -35,20 +35,23 @@ class GithubServiceUnitTest {
 
     @Test
     void getUserRepositories_shouldReturnFilteredRepositories() {
-        Branch branch = new Branch();
-        Repository repository1 = new Repository("user", "repo1", false, List.of(branch));
+        Branch branch = new Branch("x", new Branch.Commit("sha"));
+        Repository repository1 = new Repository(new Repository.Owner("xd"), "repo1", false, List.of(branch));
 
         when(webClientMock.get())
                 .thenReturn(requestHeadersUriMock);
 
         when(requestHeadersUriMock.uri(eq("/users/{username}/repos"), anyString()))
                 .thenReturn(requestHeadersMock);
-        when(requestHeadersUriMock.uri(eq("/repos/{ownerLogin}/{repositoryName}/branches"), anyString(), anyString()))
+        when(requestHeadersUriMock.uri(eq("/repos/{login}/{repositoryName}/branches"), anyString(), anyString()))
                 .thenReturn(requestHeadersMock);
 
         when(requestHeadersMock.retrieve())
                 .thenReturn(responseMock);
         when(requestHeadersMock.retrieve())
+                .thenReturn(responseMock);
+
+        when(responseMock.onStatus(any(), any()))
                 .thenReturn(responseMock);
 
         when(responseMock.bodyToFlux(Repository.class))
@@ -59,26 +62,30 @@ class GithubServiceUnitTest {
         Flux<Repository> result = githubService.getUserRepositories("user");
 
         StepVerifier.create(result)
-                .expectNextMatches(repo -> repo.getRepositoryName().equals("repo1"))
+                .expectNextMatches(repo -> repo.repositoryName().equals("repo1"))
                 .verifyComplete();
     }
 
     @Test
     void getUserRepositories_shouldNotReturnRepositoryWhenIsFork() {
-        Branch branch = new Branch();
-        Repository repository1 = new Repository("user", "repo1", true, List.of(branch));
+        Branch branch = new Branch("x", new Branch.Commit("sha"));
+        Repository repository1 = new Repository(new Repository.Owner("huga721"),
+                "repo1", true, List.of(branch));
 
         when(webClientMock.get())
                 .thenReturn(requestHeadersUriMock);
 
         when(requestHeadersUriMock.uri(eq("/users/{username}/repos"), anyString()))
                 .thenReturn(requestHeadersMock);
-        when(requestHeadersUriMock.uri(eq("/repos/{ownerLogin}/{repositoryName}/branches"), anyString(), anyString()))
+        when(requestHeadersUriMock.uri(eq("/repos/{login}/{repositoryName}/branches"), anyString(), anyString()))
                 .thenReturn(requestHeadersMock);
 
         when(requestHeadersMock.retrieve())
                 .thenReturn(responseMock);
         when(requestHeadersMock.retrieve())
+                .thenReturn(responseMock);
+
+        when(responseMock.onStatus(any(), any()))
                 .thenReturn(responseMock);
 
         when(responseMock.bodyToFlux(Repository.class))
