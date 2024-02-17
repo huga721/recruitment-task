@@ -11,7 +11,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 public class WebClientConfig {
 
     @Bean
-    public WebClient webClient(@Value("${github.api.url}") String baseUrl) {
+    public WebClient githubWebClient(@Value("${github.api.url}") String baseUrl) {
         return WebClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
