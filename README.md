@@ -24,4 +24,4 @@ Gradle 8.5 (as Java 21 is only compatible with Gradle 8.5)
 - Lombok
 - Spring Boot 3
 - Spring WebFlux
-- Testing libraries (JUnit, MockWebServer, Mockito)
+- Testing libraries (JUnit, WireMockServer, WebTestClient)
